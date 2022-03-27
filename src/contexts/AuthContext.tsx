@@ -1,3 +1,5 @@
+import Router, { useRouter } from "next/router";
+import { destroyCookie, parseCookies, setCookie } from "nookies";
 import {
   createContext,
   ReactNode,
@@ -5,9 +7,7 @@ import {
   useEffect,
   useState,
 } from "react";
-import Router from "next/router";
-import { api } from "../services/api";
-import { setCookie, parseCookies, destroyCookie } from "nookies";
+import { api } from "../services/apiClient";
 
 type AuthProviderProps = {
   children: ReactNode;
@@ -19,7 +19,8 @@ type SignInCredentials = {
 };
 
 type AuthContextData = {
-  signIn(credentials: SignInCredentials): Promise<void>;
+  signIn: (credentials: SignInCredentials) => Promise<void>;
+  signOut: () => void;
   user: User;
   isAuthenticated: boolean;
 };
@@ -30,11 +31,15 @@ type User = {
   roles: string[];
 };
 
-const AuthContext = createContext({} as AuthContextData);
+export const AuthContext = createContext({} as AuthContextData);
+
+let authChannel: BroadcastChannel;
 
 export function signOut() {
   destroyCookie(undefined, "nextAuth.token");
   destroyCookie(undefined, "nextAuth.refreshToken");
+
+  /* authChannel.postMessage("signOut"); */
 
   Router.push("/");
 }
@@ -42,6 +47,24 @@ export function signOut() {
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User>();
   const isAuthenticated = !!user;
+  const router = useRouter();
+
+  /* useEffect(() => {
+    authChannel = new BroadcastChannel("auth");
+
+    authChannel.onmessage = (message) => {
+      switch (message.data) {
+        case "signOut":
+          signOut();
+          break;
+        case "signIn":
+          router.push("/dashboard");
+          break;
+        default:
+          break;
+      }
+    };
+  }, []); */
 
   useEffect(() => {
     const { "nextAuth.token": token } = parseCookies();
@@ -87,14 +110,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       api.defaults.headers["Authorization"] = `Bearer ${token}`;
 
-      Router.push("/dashboard");
+      router.push("/dashboard");
+
+      /* authChannel.postMessage("signIn"); */
     } catch (error) {
       console.log(error);
     }
   }
 
   return (
-    <AuthContext.Provider value={{ signIn, isAuthenticated, user }}>
+    <AuthContext.Provider value={{ signIn, signOut, isAuthenticated, user }}>
       {children}
     </AuthContext.Provider>
   );
